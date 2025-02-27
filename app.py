@@ -627,8 +627,8 @@ def adjust_asset():
         # 記錄銷存交易，包含原因
         transaction_type = '銷存增加' if adjustment_type == '增加' else '銷存減少'
         cursor.execute(
-            'INSERT INTO transactions (category_id, quantity, transaction_type, operation_type, asset_status, ip_address, reason) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            (category_id, quantity, transaction_type, adjustment_type, asset_status, ip_address, reason)
+            'INSERT INTO transactions (category_id, quantity, transaction_type, operation_type, asset_status, reason, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (category_id, quantity, transaction_type, adjustment_type, asset_status, reason, ip_address)
         )
         
         conn.commit()
