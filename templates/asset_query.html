@@ -1,0 +1,426 @@
+<!-- templates/asset_query.html (資產查詢頁面) -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CMoney庫存管理系統 - 資產查詢</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        body {
+            padding-top: 20px;
+        }
+        .section {
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+        }
+        .section-title {
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        #transactionList {
+            height: 600px;
+            overflow-y: auto;
+        }
+        .loading {
+            display: none;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>CMoney庫存管理系統 - 資產查詢</h1>
+            <a href="/" class="btn btn-outline-primary">返回首頁</a>
+        </div>
+        
+        <!-- 交易記錄查詢 -->
+        <div class="section">
+            <h3 class="section-title">交易記錄查詢</h3>
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label for="startDate" class="form-label">開始日期</label>
+                    <input type="date" id="startDate" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label for="endDate" class="form-label">結束日期</label>
+                    <input type="date" id="endDate" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label for="searchKeyword" class="form-label">資產類別關鍵字</label>
+                    <input type="text" id="searchKeyword" class="form-control" placeholder="輸入資產類別名稱">
+                </div>
+            </div>
+            <button class="btn btn-primary" id="searchBtn">查詢</button>
+            <button class="btn btn-outline-secondary" id="clearBtn">清除條件</button>
+            <span class="loading" id="searchLoading">處理中...</span>
+            
+            <!-- 統計結果區塊 -->
+            <div id="statisticsContainer" class="mt-4" style="display:none;">
+                <h4>類別變動統計</h4>
+                <div class="table-responsive">
+                    <table class="table table-striped table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th rowspan="2" class="align-middle">資產類別</th>
+                                <th colspan="2" class="text-center">入庫操作</th>
+                                <th colspan="3" class="text-center">出庫操作</th>
+                                <th colspan="4" class="text-center">銷存操作</th>
+                                <th rowspan="2" class="align-middle text-center">淨變動</th>
+                            </tr>
+                            <tr>
+                                <th class="text-center">購入</th>
+                                <th class="text-center">收回</th>
+                                <th class="text-center">發放</th>
+                                <th class="text-center">送修</th>
+                                <th class="text-center">報廢</th>
+                                <th class="text-center">增加(新品)</th>
+                                <th class="text-center">增加(二手)</th>
+                                <th class="text-center">減少(新品)</th>
+                                <th class="text-center">減少(二手)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categoryStatisticsBody"></tbody>
+                        <tfoot id="statisticsFooter" class="table-secondary">
+                            <tr>
+                                <th>總計</th>
+                                <th id="totalPurchase" class="text-center">-</th>
+                                <th id="totalReturn" class="text-center">-</th>
+                                <th id="totalDistribute" class="text-center">-</th>
+                                <th id="totalRepair" class="text-center">-</th>
+                                <th id="totalDiscard" class="text-center">-</th>
+                                <th id="totalInventoryIncreaseNew" class="text-center">-</th>
+                                <th id="totalInventoryIncreaseUsed" class="text-center">-</th>
+                                <th id="totalInventoryDecreaseNew" class="text-center">-</th>
+                                <th id="totalInventoryDecreaseUsed" class="text-center">-</th>
+                                <th id="totalNetChange" class="text-center">-</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="transactionList" class="mt-4">
+                <h4>交易記錄詳情</h4>
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>時間</th>
+                            <th>資產類別</th>
+                            <th>操作</th>
+                            <th>類型</th>
+                            <th>資產狀態</th>
+                            <th>數量</th>
+                            <th>IP位址</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 設置默認日期範圍（最近7天）
+            function setDefaultDateRange() {
+                const today = new Date();
+                const startDate = new Date();
+                startDate.setDate(today.getDate() - 7);
+                
+                document.getElementById('endDate').valueAsDate = today;
+                document.getElementById('startDate').valueAsDate = startDate;
+            }
+            
+            // 載入交易記錄
+            function loadTransactions() {
+                document.getElementById('searchLoading').style.display = 'inline';
+                document.getElementById('statisticsContainer').style.display = 'none';
+                
+                const startDate = document.getElementById('startDate').value;
+                const endDate = document.getElementById('endDate').value;
+                const searchKeyword = document.getElementById('searchKeyword').value.trim().toLowerCase();
+                
+                if (!startDate || !endDate) {
+                    alert('請選擇開始和結束日期');
+                    document.getElementById('searchLoading').style.display = 'none';
+                    return;
+                }
+                
+                let url = '/api/transactions';
+                if (startDate && endDate) {
+                    url += `?start_date=${startDate}&end_date=${endDate}`;
+                }
+                
+                // 同時獲取期間開始和結束時的資產狀態
+                const startDateAssets = fetch(`/api/assets?date=${startDate}`);
+                const endDateAssets = fetch(`/api/assets?date=${endDate}`);
+                const transactions = fetch(url).then(response => response.json());
+                
+                Promise.all([transactions, startDateAssets.then(response => response.json()), endDateAssets.then(response => response.json())])
+                    .then(([transactions, startAssets, endAssets]) => {
+                        // 如果有搜尋關鍵字，過濾資產和交易
+                        let filteredTransactions = transactions;
+                        let filteredStartAssets = startAssets;
+                        let filteredEndAssets = endAssets;
+                        
+                        if (searchKeyword) {
+                            filteredTransactions = transactions.filter(transaction => 
+                                transaction.category_name && transaction.category_name.toLowerCase().includes(searchKeyword)
+                            );
+                            
+                            filteredStartAssets = startAssets.filter(asset => 
+                                asset.category_name && asset.category_name.toLowerCase().includes(searchKeyword)
+                            );
+                            
+                            filteredEndAssets = endAssets.filter(asset => 
+                                asset.category_name && asset.category_name.toLowerCase().includes(searchKeyword)
+                            );
+                        }
+                        
+                        // 處理交易記錄
+                        const tableBody = document.getElementById('transactionTableBody');
+                        tableBody.innerHTML = '';
+                        
+                        if (filteredTransactions.length === 0) {
+                            const row = document.createElement('tr');
+                            row.innerHTML = '<td colspan="7" class="text-center">暫無符合條件的交易記錄</td>';
+                            tableBody.appendChild(row);
+                        } else {
+                            filteredTransactions.forEach(transaction => {
+                                const row = document.createElement('tr');
+                                const date = new Date(transaction.timestamp).toLocaleString();
+                                // 根據記錄類型顯示不同內容
+                                if (transaction.record_type === 'category') {
+                                    row.innerHTML = `
+                                        <td>${date}</td>
+                                        <td>${transaction.category_name}</td>
+                                        <td>${transaction.transaction_type}</td>
+                                        <td>-</td>
+                                        <td>-</td>
+                                        <td>-</td>
+                                        <td>-</td>
+                                    `;
+                                } else {
+                                    row.innerHTML = `
+                                        <td>${date}</td>
+                                        <td>${transaction.category_name}</td>
+                                        <td>${transaction.transaction_type}</td>
+                                        <td>${transaction.operation_type || '-'}</td>
+                                        <td>${transaction.asset_status || '-'}</td>
+                                        <td>${transaction.quantity}</td>
+                                        <td>${transaction.ip_address || '-'}</td>
+                                    `;
+                                }
+                                tableBody.appendChild(row);
+                            });
+                        }
+                        
+                        // 生成統計數據
+                        generateStatistics(filteredTransactions, filteredStartAssets, filteredEndAssets);
+                        
+                        document.getElementById('searchLoading').style.display = 'none';
+                    })
+                    .catch(error => {
+                        console.error('載入資料失敗:', error);
+                        document.getElementById('searchLoading').style.display = 'none';
+                        alert('載入資料時發生錯誤，請重試');
+                    });
+            }
+            
+            // 生成統計數據
+            function generateStatistics(transactions, startAssets, endAssets) {
+                // 顯示統計區塊
+                document.getElementById('statisticsContainer').style.display = 'block';
+                
+                // 統計各操作類型的總數
+                const totalStats = {
+                    '購入': 0,
+                    '收回': 0,
+                    '發放': 0,
+                    '送修': 0,
+                    '報廢': 0,
+                    '銷存增加_新品': 0,
+                    '銷存增加_二手': 0,
+                    '銷存減少_新品': 0,
+                    '銷存減少_二手': 0,
+                    'netChange': 0
+                };
+                
+                // 統計每個類別的操作數量
+                const categoryStats = {};
+                
+                // 先過濾掉類別操作記錄，只關注資產操作
+                const assetTransactions = transactions.filter(t => t.record_type !== 'category');
+                
+                assetTransactions.forEach(transaction => {
+                    const categoryName = transaction.category_name;
+                    const operationType = transaction.operation_type;
+                    const quantity = transaction.quantity;
+                    const transactionType = transaction.transaction_type;
+                    const assetStatus = transaction.asset_status;
+                    
+                    // 初始化類別統計對象
+                    if (!categoryStats[categoryName]) {
+                        categoryStats[categoryName] = {
+                            '購入': 0,
+                            '收回': 0,
+                            '發放': 0,
+                            '送修': 0,
+                            '報廢': 0,
+                            '銷存增加_新品': 0,
+                            '銷存增加_二手': 0,
+                            '銷存減少_新品': 0,
+                            '銷存減少_二手': 0,
+                            'hasInventoryAdjustment': false,
+                            'netChange': 0
+                        };
+                    }
+                    
+                    // 更新類別統計
+                    if (transactionType === '入庫' && operationType) {
+                        categoryStats[categoryName][operationType] += quantity;
+                        categoryStats[categoryName].netChange += quantity;
+                        totalStats[operationType] += quantity;
+                        totalStats.netChange += quantity;
+                    } else if (transactionType === '出庫' && operationType) {
+                        categoryStats[categoryName][operationType] += quantity;
+                        categoryStats[categoryName].netChange -= quantity;
+                        totalStats[operationType] += quantity;
+                        totalStats.netChange -= quantity;
+                    } else if (transactionType === '銷存增加') {
+                        // 根據資產狀態統計
+                        if (assetStatus === '新品') {
+                            categoryStats[categoryName]['銷存增加_新品'] += quantity;
+                            totalStats['銷存增加_新品'] += quantity;
+                        } else if (assetStatus === '二手') {
+                            categoryStats[categoryName]['銷存增加_二手'] += quantity;
+                            totalStats['銷存增加_二手'] += quantity;
+                        }
+                        categoryStats[categoryName].netChange += quantity;
+                        totalStats.netChange += quantity;
+                        categoryStats[categoryName].hasInventoryAdjustment = true;
+                    } else if (transactionType === '銷存減少') {
+                        // 根據資產狀態統計
+                        if (assetStatus === '新品') {
+                            categoryStats[categoryName]['銷存減少_新品'] += quantity;
+                            totalStats['銷存減少_新品'] += quantity;
+                        } else if (assetStatus === '二手') {
+                            categoryStats[categoryName]['銷存減少_二手'] += quantity;
+                            totalStats['銷存減少_二手'] += quantity;
+                        }
+                        categoryStats[categoryName].netChange -= quantity;
+                        totalStats.netChange -= quantity;
+                        categoryStats[categoryName].hasInventoryAdjustment = true;
+                    }
+                });
+                
+                // 更新類別統計表格
+                const tbody = document.getElementById('categoryStatisticsBody');
+                tbody.innerHTML = '';
+                
+                Object.entries(categoryStats).forEach(([category, stats]) => {
+                    const row = document.createElement('tr');
+                    const netChangeClass = stats.netChange > 0 ? 'text-success' : (stats.netChange < 0 ? 'text-danger' : '');
+                    const netChangeSign = stats.netChange > 0 ? '+' : '';
+                    const hasAdjustmentNote = stats.hasInventoryAdjustment ? ' <span class="badge bg-warning text-dark" title="有銷存調整記錄">銷存</span>' : '';
+                    
+                    row.innerHTML = `
+                        <td>${category}${hasAdjustmentNote}</td>
+                        <td class="text-center">${stats['購入'] || '-'}</td>
+                        <td class="text-center">${stats['收回'] || '-'}</td>
+                        <td class="text-center">${stats['發放'] || '-'}</td>
+                        <td class="text-center">${stats['送修'] || '-'}</td>
+                        <td class="text-center">${stats['報廢'] || '-'}</td>
+                        <td class="text-center">${stats['銷存增加_新品'] || '-'}</td>
+                        <td class="text-center">${stats['銷存增加_二手'] || '-'}</td>
+                        <td class="text-center">${stats['銷存減少_新品'] || '-'}</td>
+                        <td class="text-center">${stats['銷存減少_二手'] || '-'}</td>
+                        <td class="text-center ${netChangeClass}">${netChangeSign}${stats.netChange}</td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                });
+                
+                // 更新統計表格頁腳的總計
+                const netChangeClass = totalStats.netChange > 0 ? 'text-success' : (totalStats.netChange < 0 ? 'text-danger' : '');
+                const netChangeSign = totalStats.netChange > 0 ? '+' : '';
+                
+                document.getElementById('totalPurchase').textContent = totalStats['購入'] || '-';
+                document.getElementById('totalReturn').textContent = totalStats['收回'] || '-';
+                document.getElementById('totalDistribute').textContent = totalStats['發放'] || '-';
+                document.getElementById('totalRepair').textContent = totalStats['送修'] || '-';
+                document.getElementById('totalDiscard').textContent = totalStats['報廢'] || '-';
+                document.getElementById('totalInventoryIncreaseNew').textContent = totalStats['銷存增加_新品'] || '-';
+                document.getElementById('totalInventoryIncreaseUsed').textContent = totalStats['銷存增加_二手'] || '-';
+                document.getElementById('totalInventoryDecreaseNew').textContent = totalStats['銷存減少_新品'] || '-';
+                document.getElementById('totalInventoryDecreaseUsed').textContent = totalStats['銷存減少_二手'] || '-';
+                
+                const totalNetChange = document.getElementById('totalNetChange');
+                totalNetChange.textContent = `${netChangeSign}${totalStats.netChange}`;
+                totalNetChange.className = `text-center ${netChangeClass}`;
+                
+                // 如果沒有交易記錄
+                if (Object.keys(categoryStats).length === 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = '<td colspan="11" class="text-center">查詢期間內無資產變動記錄</td>';
+                    tbody.appendChild(row);
+                }
+            }
+            
+            // 查詢按鈕點擊事件
+            document.getElementById('searchBtn').addEventListener('click', function() {
+                const startDate = document.getElementById('startDate').value;
+                const endDate = document.getElementById('endDate').value;
+                
+                if (!startDate || !endDate) {
+                    alert('請選擇開始和結束日期');
+                    return;
+                }
+                
+                if (new Date(startDate) > new Date(endDate)) {
+                    alert('開始日期不能晚於結束日期');
+                    return;
+                }
+                
+                loadTransactions();
+            });
+            
+            // 清除條件按鈕點擊事件
+            document.getElementById('clearBtn').addEventListener('click', function() {
+                document.getElementById('startDate').value = '';
+                document.getElementById('endDate').value = '';
+                document.getElementById('searchKeyword').value = '';
+                document.getElementById('statisticsContainer').style.display = 'none';
+                
+                // 清空交易記錄表格
+                const tableBody = document.getElementById('transactionTableBody');
+                tableBody.innerHTML = '<tr><td colspan="7" class="text-center">請設定查詢條件並按下查詢按鈕</td></tr>';
+            });
+            
+            // 關鍵字搜尋框的即時搜尋功能
+            document.getElementById('searchKeyword').addEventListener('keyup', function(event) {
+                // 如果按下Enter鍵，執行搜尋
+                if (event.key === 'Enter') {
+                    const startDate = document.getElementById('startDate').value;
+                    const endDate = document.getElementById('endDate').value;
+                    
+                    if (startDate && endDate) {
+                        loadTransactions();
+                    }
+                }
+            });
+            
+            // 初始化頁面
+            setDefaultDateRange();
+            loadTransactions();
+        });
+    </script>
+</body>
+</html>

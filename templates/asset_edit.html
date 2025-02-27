@@ -1,0 +1,761 @@
+<!-- templates/asset_edit.html (更動資產頁面) -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CMoney庫存管理系統 - 更動資產</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        body {
+            padding-top: 20px;
+        }
+        .section {
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+        }
+        .section-title {
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .loading {
+            display: none;
+            margin: 0 10px;
+        }
+        .left-column {
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        #assetList {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .operation-section {
+            display: none;
+        }
+        .operation-section.active {
+            display: block;
+        }
+        .nav-pills .nav-link {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>CMoney庫存管理系統 - 更動資產</h1>
+            <a href="/" class="btn btn-outline-primary">返回首頁</a>
+        </div>
+        
+        <div class="row">
+            <!-- 左側：現存資產區塊 -->
+            <div class="col-md-6 left-column">
+                <div class="section">
+                    <h3 class="section-title">現存資產</h3>
+                    <div class="mb-3">
+                        <label for="assetFilter" class="form-label">過濾資產</label>
+                        <input type="text" id="assetFilter" class="form-control" placeholder="輸入資產類別名稱進行過濾">
+                    </div>
+                    <button class="btn btn-outline-secondary mb-3" id="refreshAssetsBtn">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                    </button>
+                    <span class="loading" id="refreshAssetsLoading">處理中...</span>
+                    <div id="assetList" class="mt-3">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>資產類別</th>
+                                    <th>總數量</th>
+                                    <th>新品</th>
+                                    <th>二手</th>
+                                </tr>
+                            </thead>
+                            <tbody id="assetTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右側：操作區塊 -->
+            <div class="col-md-6">
+                <!-- 資產類別管理 -->
+                <div class="section">
+                    <h3 class="section-title">資產類別管理</h3>
+                    <div class="input-group mb-3">
+                        <input type="text" id="newCategoryName" class="form-control" placeholder="輸入資產類別名稱">
+                        <button class="btn btn-primary" id="addCategoryBtn">新增類別</button>
+                        <span class="loading" id="addCategoryLoading">處理中...</span>
+                    </div>
+                    <div id="categoryError" class="text-danger mb-3"></div>
+                    
+                    <!-- 刪除類別 -->
+                    <div class="mt-3">
+                        <h5>刪除類別</h5>
+                        <div class="input-group">
+                            <select id="deleteCategorySelect" class="form-select">
+                                <option value="">選擇要刪除的類別</option>
+                            </select>
+                            <button class="btn btn-danger" id="deleteCategoryBtn">刪除類別</button>
+                            <span class="loading" id="deleteCategoryLoading">處理中...</span>
+                        </div>
+                        <div id="deleteCategoryError" class="text-danger mt-2"></div>
+                    </div>
+                </div>
+                
+                <!-- 操作導航 -->
+                <div class="section">
+                    <h3 class="section-title">庫存操作</h3>
+                    
+                    <!-- 操作切換按鈕 -->
+                    <ul class="nav nav-pills mb-3" id="operationTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="checkin-tab" data-bs-toggle="pill" data-bs-target="#checkin-operation" type="button" role="tab">
+                                <i class="bi bi-box-arrow-in-down"></i> 入庫
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="checkout-tab" data-bs-toggle="pill" data-bs-target="#checkout-operation" type="button" role="tab">
+                                <i class="bi bi-box-arrow-up-right"></i> 出庫
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="adjust-tab" data-bs-toggle="pill" data-bs-target="#adjust-operation" type="button" role="tab">
+                                <i class="bi bi-pencil-square"></i> 銷存
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <!-- 操作內容區域 -->
+                    <div class="tab-content" id="operationContent">
+                        <!-- 入庫操作 -->
+                        <div class="tab-pane fade show active" id="checkin-operation" role="tabpanel">
+                            <div class="mb-3">
+                                <div class="d-flex align-items-center">
+                                    <label for="checkinCategory" class="form-label me-2">選擇資產類別</label>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary refresh-category-btn" data-target="checkinCategory">
+                                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                                    </button>
+                                </div>
+                                <select id="checkinCategory" class="form-select"></select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="checkinQuantity" class="form-label">數量</label>
+                                <input type="number" id="checkinQuantity" class="form-control" min="1" max="10000" value="1">
+                            </div>
+                            <div class="mb-3">
+                                <label for="checkinType" class="form-label">入庫類型</label>
+                                <select id="checkinType" class="form-select">
+                                    <option value="購入">購入 (新品)</option>
+                                    <option value="收回">收回 (二手)</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-info" id="checkinBtn">確認入庫</button>
+                            <span class="loading" id="checkinLoading">處理中...</span>
+                            <div id="checkinError" class="text-danger mt-2"></div>
+                        </div>
+                        
+                        <!-- 出庫操作 -->
+                        <div class="tab-pane fade" id="checkout-operation" role="tabpanel">
+                            <div class="mb-3">
+                                <div class="d-flex align-items-center">
+                                    <label for="checkoutCategory" class="form-label me-2">選擇資產類別</label>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary refresh-category-btn" data-target="checkoutCategory">
+                                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                                    </button>
+                                </div>
+                                <select id="checkoutCategory" class="form-select"></select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="checkoutQuantity" class="form-label">數量</label>
+                                <input type="number" id="checkoutQuantity" class="form-control" min="1" max="10000" value="1">
+                            </div>
+                            <div class="mb-3">
+                                <label for="checkoutType" class="form-label">出庫類型</label>
+                                <select id="checkoutType" class="form-select">
+                                    <option value="發放">發放</option>
+                                    <option value="送修">送修</option>
+                                    <option value="報廢">報廢</option>
+                                </select>
+                            </div>
+                            <!-- 資產狀態欄位(適用於所有出庫類型) -->
+                            <div class="mb-3">
+                                <label for="checkoutAssetStatus" class="form-label">資產狀態</label>
+                                <select id="checkoutAssetStatus" class="form-select">
+                                    <option value="新品">新品</option>
+                                    <option value="二手">二手</option>
+                                </select>
+                                <div id="checkoutAssetStatusInfo" class="text-info mt-1 small"></div>
+                            </div>
+                            <button class="btn btn-warning" id="checkoutBtn">確認出庫</button>
+                            <span class="loading" id="checkoutLoading">處理中...</span>
+                            <div id="checkoutError" class="text-danger mt-2"></div>
+                        </div>
+                        
+                        <!-- 銷存操作 -->
+                        <div class="tab-pane fade" id="adjust-operation" role="tabpanel">
+                            <div class="mb-3">
+                                <div class="d-flex align-items-center">
+                                    <label for="adjustCategory" class="form-label me-2">選擇資產類別</label>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary refresh-category-btn" data-target="adjustCategory">
+                                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                                    </button>
+                                </div>
+                                <select id="adjustCategory" class="form-select"></select>
+                            </div>
+                            <div class="mb-3 row">
+                                <div class="col-md-4">
+                                    <label for="currentTotalQuantity" class="form-label">總數量</label>
+                                    <input type="text" id="currentTotalQuantity" class="form-control" readonly>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="currentNewQuantity" class="form-label">新品數量</label>
+                                    <input type="text" id="currentNewQuantity" class="form-control" readonly>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="currentUsedQuantity" class="form-label">二手數量</label>
+                                    <input type="text" id="currentUsedQuantity" class="form-control" readonly>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="adjustType" class="form-label">調整類型</label>
+                                <select id="adjustType" class="form-select">
+                                    <option value="增加">增加</option>
+                                    <option value="減少">減少</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="adjustAssetStatus" class="form-label">資產狀態</label>
+                                <select id="adjustAssetStatus" class="form-select">
+                                    <option value="新品">新品</option>
+                                    <option value="二手">二手</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="adjustQuantity" class="form-label">調整數量</label>
+                                <input type="number" id="adjustQuantity" class="form-control" min="1" max="10000" value="1">
+                            </div>
+                            <div class="mb-3">
+                                <label for="adjustReason" class="form-label">調整原因 <span class="text-danger">*</span></label>
+                                <textarea id="adjustReason" class="form-control" rows="3" placeholder="請輸入銷存調整原因（必填）"></textarea>
+                            </div>
+                            <button class="btn btn-secondary" id="adjustBtn">確認調整</button>
+                            <span class="loading" id="adjustLoading">處理中...</span>
+                            <div id="adjustError" class="text-danger mt-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 載入資產類別
+            function loadCategories() {
+                fetch('/api/categories')
+                    .then(response => response.json())
+                    .then(categories => {
+                        const selects = [
+                            document.getElementById('checkoutCategory'),
+                            document.getElementById('checkinCategory'),
+                            document.getElementById('deleteCategorySelect'),
+                            document.getElementById('adjustCategory')
+                        ];
+                        
+                        selects.forEach(select => {
+                            // 保存先前選中的值
+                            const previousValue = select.value;
+                            
+                            select.innerHTML = '';
+                            
+                            // 為刪除下拉選單添加預設選項
+                            if (select.id === 'deleteCategorySelect') {
+                                select.innerHTML = '<option value="">選擇要刪除的類別</option>';
+                            } else if (select.id === 'adjustCategory') {
+                                select.innerHTML = '<option value="">選擇要調整的類別</option>';
+                            }
+                            
+                            if (categories.length === 0) {
+                                if (select.id !== 'deleteCategorySelect' && select.id !== 'adjustCategory') {
+                                    select.innerHTML = '<option value="">請先新增資產類別</option>';
+                                }
+                            } else {
+                                categories.forEach(category => {
+                                    const option = document.createElement('option');
+                                    option.value = category.id;
+                                    option.textContent = category.name;
+                                    select.appendChild(option);
+                                    
+                                    // 如果此值是之前選中的，則重新選中它
+                                    if (previousValue && previousValue === category.id.toString()) {
+                                        option.selected = true;
+                                    }
+                                });
+                            }
+                        });
+                    })
+                    .catch(error => console.error('載入資產類別失敗:', error));
+            }
+            
+            // 載入資產
+            function loadAssets() {
+                document.getElementById('refreshAssetsLoading').style.display = 'inline';
+                fetch('/api/assets')
+                    .then(response => response.json())
+                    .then(assets => {
+                        const tableBody = document.getElementById('assetTableBody');
+                        tableBody.innerHTML = '';
+                        
+                        if (assets.length === 0) {
+                            const row = document.createElement('tr');
+                            row.innerHTML = '<td colspan="4" class="text-center">暫無資產</td>';
+                            tableBody.appendChild(row);
+                        } else {
+                            // 獲取過濾詞
+                            const filterValue = document.getElementById('assetFilter').value.toLowerCase().trim();
+                            
+                            // 過濾資產
+                            const filteredAssets = filterValue ? 
+                                assets.filter(asset => asset.category_name.toLowerCase().includes(filterValue)) :
+                                assets;
+                            
+                            if (filteredAssets.length === 0) {
+                                const row = document.createElement('tr');
+                                row.innerHTML = '<td colspan="4" class="text-center">沒有符合條件的資產</td>';
+                                tableBody.appendChild(row);
+                            } else {
+                                filteredAssets.forEach(asset => {
+                                    const row = document.createElement('tr');
+                                    row.innerHTML = `
+                                        <td>${asset.category_name}</td>
+                                        <td>${asset.total_quantity}</td>
+                                        <td>${asset.new_quantity}</td>
+                                        <td>${asset.used_quantity}</td>
+                                    `;
+                                    tableBody.appendChild(row);
+                                });
+                            }
+                        }
+                        document.getElementById('refreshAssetsLoading').style.display = 'none';
+                    })
+                    .catch(error => {
+                        console.error('載入資產失敗:', error);
+                        document.getElementById('refreshAssetsLoading').style.display = 'none';
+                    });
+            }
+            
+            // 資產過濾功能
+            document.getElementById('assetFilter').addEventListener('input', loadAssets);
+            
+            // 刷新資產列表
+            document.getElementById('refreshAssetsBtn').addEventListener('click', loadAssets);
+            
+            // 更新銷存中的當前數量顯示
+            function updateCurrentQuantity(categoryId) {
+                if (!categoryId) {
+                    document.getElementById('currentTotalQuantity').value = '';
+                    document.getElementById('currentNewQuantity').value = '';
+                    document.getElementById('currentUsedQuantity').value = '';
+                    return;
+                }
+                
+                fetch(`/api/assets/category/${categoryId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            console.error(data.error);
+                            document.getElementById('currentTotalQuantity').value = '錯誤';
+                            document.getElementById('currentNewQuantity').value = '錯誤';
+                            document.getElementById('currentUsedQuantity').value = '錯誤';
+                        } else {
+                            document.getElementById('currentTotalQuantity').value = data.total_quantity || 0;
+                            document.getElementById('currentNewQuantity').value = data.new_quantity || 0;
+                            document.getElementById('currentUsedQuantity').value = data.used_quantity || 0;
+                            
+                            // 更新出庫資產狀態欄位的資訊
+                            updateCheckoutAssetStatusInfo(categoryId);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('獲取類別資產數量失敗:', error);
+                        document.getElementById('currentTotalQuantity').value = '錯誤';
+                        document.getElementById('currentNewQuantity').value = '錯誤';
+                        document.getElementById('currentUsedQuantity').value = '錯誤';
+                    });
+            }
+            
+            // 更新出庫資產狀態資訊
+            function updateCheckoutAssetStatusInfo(categoryId) {
+                if (!categoryId) return;
+                
+                fetch(`/api/assets/category/${categoryId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const infoEl = document.getElementById('checkoutAssetStatusInfo');
+                        if (data.error) {
+                            infoEl.textContent = '';
+                        } else {
+                            infoEl.innerHTML = `可用庫存: 新品 ${data.new_quantity || 0} 件, 二手 ${data.used_quantity || 0} 件`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('獲取出庫資產狀態資訊失敗:', error);
+                    });
+            }
+            
+            // 新增資產類別
+            document.getElementById('addCategoryBtn').addEventListener('click', function() {
+                const categoryName = document.getElementById('newCategoryName').value.trim();
+                if (!categoryName) {
+                    document.getElementById('categoryError').textContent = '類別名稱不能為空';
+                    return;
+                }
+                
+                document.getElementById('addCategoryLoading').style.display = 'inline';
+                document.getElementById('categoryError').textContent = '';
+                
+                fetch('/api/categories', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: categoryName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('categoryError').textContent = data.error;
+                    } else {
+                        document.getElementById('newCategoryName').value = '';
+                        loadCategories();
+                        loadAssets(); // 刷新資產列表
+                    }
+                    document.getElementById('addCategoryLoading').style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('新增類別失敗:', error);
+                    document.getElementById('categoryError').textContent = '發生錯誤，請重試';
+                    document.getElementById('addCategoryLoading').style.display = 'none';
+                });
+            });
+            
+            // 刪除資產類別
+            document.getElementById('deleteCategoryBtn').addEventListener('click', function() {
+                const categoryId = document.getElementById('deleteCategorySelect').value;
+                if (!categoryId) {
+                    document.getElementById('deleteCategoryError').textContent = '請選擇要刪除的類別';
+                    return;
+                }
+                
+                if (!confirm('確定要刪除此類別嗎？此操作無法復原！')) {
+                    return;
+                }
+                
+                document.getElementById('deleteCategoryLoading').style.display = 'inline';
+                document.getElementById('deleteCategoryError').textContent = '';
+                
+                fetch(`/api/categories/${categoryId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('deleteCategoryError').textContent = data.error;
+                    } else {
+                        document.getElementById('deleteCategorySelect').value = '';
+                        loadCategories();
+                        loadAssets(); // 刷新資產列表
+                    }
+                    document.getElementById('deleteCategoryLoading').style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('刪除類別失敗:', error);
+                    document.getElementById('deleteCategoryError').textContent = '發生錯誤，請重試';
+                    document.getElementById('deleteCategoryLoading').style.display = 'none';
+                });
+            });
+            
+            // 出庫類別選擇改變時，更新資產狀態欄位資訊
+            document.getElementById('checkoutCategory').addEventListener('change', function() {
+                const categoryId = this.value;
+                if (categoryId) {
+                    updateCheckoutAssetStatusInfo(categoryId);
+                }
+            });
+            
+            // 出庫
+            document.getElementById('checkoutBtn').addEventListener('click', function() {
+                const categoryId = document.getElementById('checkoutCategory').value;
+                const quantity = parseInt(document.getElementById('checkoutQuantity').value);
+                const operationType = document.getElementById('checkoutType').value;
+                let assetStatus = null;
+                
+                // 獲取資產狀態(適用於所有出庫類型)
+                assetStatus = document.getElementById('checkoutAssetStatus').value;
+                
+                if (!categoryId) {
+                    document.getElementById('checkoutError').textContent = '請選擇資產類別';
+                    return;
+                }
+                
+                if (isNaN(quantity) || quantity <= 0) {
+                    document.getElementById('checkoutError').textContent = '數量必須大於0';
+                    return;
+                }
+                
+                if (quantity > 10000) {
+                    document.getElementById('checkoutError').textContent = '數量不能超過10000';
+                    return;
+                }
+                
+                document.getElementById('checkoutLoading').style.display = 'inline';
+                document.getElementById('checkoutError').textContent = '';
+                
+                const requestData = { 
+                    category_id: categoryId, 
+                    quantity: quantity,
+                    operation_type: operationType
+                };
+                
+                // 所有出庫操作都添加資產狀態
+                requestData.asset_status = assetStatus;
+                
+                fetch('/api/assets/checkout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('checkoutError').textContent = data.error;
+                    } else {
+                        document.getElementById('checkoutQuantity').value = 1;
+                        // 更新出庫資產狀態欄位的資訊
+                        updateCheckoutAssetStatusInfo(categoryId);
+                        loadAssets(); // 刷新資產列表
+                        alert('出庫成功！');
+                    }
+                    document.getElementById('checkoutLoading').style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('出庫失敗:', error);
+                    document.getElementById('checkoutError').textContent = '發生錯誤，請重試';
+                    document.getElementById('checkoutLoading').style.display = 'none';
+                });
+            });
+            
+            // 入庫
+            document.getElementById('checkinBtn').addEventListener('click', function() {
+                const categoryId = document.getElementById('checkinCategory').value;
+                const quantity = parseInt(document.getElementById('checkinQuantity').value);
+                const operationType = document.getElementById('checkinType').value;
+                
+                if (!categoryId) {
+                    document.getElementById('checkinError').textContent = '請選擇資產類別';
+                    return;
+                }
+                
+                if (isNaN(quantity) || quantity <= 0) {
+                    document.getElementById('checkinError').textContent = '數量必須大於0';
+                    return;
+                }
+                
+                if (quantity > 10000) {
+                    document.getElementById('checkinError').textContent = '數量不能超過10000';
+                    return;
+                }
+                
+                document.getElementById('checkinLoading').style.display = 'inline';
+                document.getElementById('checkinError').textContent = '';
+                
+                fetch('/api/assets/checkin', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        category_id: categoryId, 
+                        quantity: quantity,
+                        operation_type: operationType
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('checkinError').textContent = data.error;
+                    } else {
+                        document.getElementById('checkinQuantity').value = 1;
+                        // 如果銷存中有選擇相同類別，更新當前數量顯示
+                        const adjustCategory = document.getElementById('adjustCategory');
+                        if (adjustCategory.value === categoryId) {
+                            updateCurrentQuantity(categoryId);
+                        }
+                        loadAssets(); // 刷新資產列表
+                        alert('入庫成功！');
+                    }
+                    document.getElementById('checkinLoading').style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('入庫失敗:', error);
+                    document.getElementById('checkinError').textContent = '發生錯誤，請重試';
+                    document.getElementById('checkinLoading').style.display = 'none';
+                });
+            });
+            
+            // 銷存調整
+            document.getElementById('adjustBtn').addEventListener('click', function() {
+                const categoryId = document.getElementById('adjustCategory').value;
+                const quantity = parseInt(document.getElementById('adjustQuantity').value);
+                const adjustmentType = document.getElementById('adjustType').value;
+                const assetStatus = document.getElementById('adjustAssetStatus').value;
+                const adjustReason = document.getElementById('adjustReason').value.trim();
+                
+                if (!categoryId) {
+                    document.getElementById('adjustError').textContent = '請選擇資產類別';
+                    return;
+                }
+                
+                if (isNaN(quantity) || quantity <= 0) {
+                    document.getElementById('adjustError').textContent = '數量必須大於0';
+                    return;
+                }
+                
+                if (quantity > 10000) {
+                    document.getElementById('adjustError').textContent = '數量不能超過10000';
+                    return;
+                }
+                
+                if (!adjustReason) {
+                    document.getElementById('adjustError').textContent = '請輸入調整原因';
+                    return;
+                }
+                
+                document.getElementById('adjustLoading').style.display = 'inline';
+                document.getElementById('adjustError').textContent = '';
+                
+                fetch('/api/assets/adjust', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        category_id: categoryId, 
+                        quantity: quantity,
+                        adjustment_type: adjustmentType,
+                        asset_status: assetStatus,
+                        reason: adjustReason
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        document.getElementById('adjustError').textContent = data.error;
+                    } else {
+                        document.getElementById('adjustQuantity').value = 1;
+                        document.getElementById('adjustReason').value = '';
+                        // 更新當前數量
+                        updateCurrentQuantity(categoryId);
+                        loadAssets(); // 刷新資產列表
+                        alert('銷存調整成功！');
+                    }
+                    document.getElementById('adjustLoading').style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('銷存調整失敗:', error);
+                    document.getElementById('adjustError').textContent = '發生錯誤，請重試';
+                    document.getElementById('adjustLoading').style.display = 'none';
+                });
+            });
+            
+            // 資產類別改變時更新當前數量
+            document.getElementById('adjustCategory').addEventListener('change', function() {
+                updateCurrentQuantity(this.value);
+            });
+            
+            // 刷新類別按鈕
+            document.querySelectorAll('.refresh-category-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    // 顯示加載提示
+                    this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 刷新中...';
+                    this.disabled = true;
+                    
+                    // 保存按鈕引用
+                    const refreshButton = this;
+                    
+                    // 加載資產類別
+                    fetch('/api/categories')
+                        .then(response => response.json())
+                        .then(categories => {
+                            const targetId = this.getAttribute('data-target');
+                            const select = document.getElementById(targetId);
+                            
+                            // 保存先前選中的值
+                            const previousValue = select.value;
+                            
+                            select.innerHTML = '';
+                            
+                            // 為特定選單添加預設選項
+                            if (select.id === 'deleteCategorySelect') {
+                                select.innerHTML = '<option value="">選擇要刪除的類別</option>';
+                            } else if (select.id === 'adjustCategory') {
+                                select.innerHTML = '<option value="">選擇要調整的類別</option>';
+                            }
+                            
+                            if (categories.length === 0) {
+                                if (select.id !== 'deleteCategorySelect' && select.id !== 'adjustCategory') {
+                                    select.innerHTML = '<option value="">請先新增資產類別</option>';
+                                }
+                            } else {
+                                categories.forEach(category => {
+                                    const option = document.createElement('option');
+                                    option.value = category.id;
+                                    option.textContent = category.name;
+                                    select.appendChild(option);
+                                    
+                                    // 如果此值是之前選中的，則重新選中它
+                                    if (previousValue && previousValue === category.id.toString()) {
+                                        option.selected = true;
+                                    }
+                                });
+                            }
+                            
+                            // 恢復按鈕狀態
+                            refreshButton.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 刷新';
+                            refreshButton.disabled = false;
+                            
+                            // 如果是銷存調整類別，更新當前數量
+                            if (targetId === 'adjustCategory' && select.value) {
+                                updateCurrentQuantity(select.value);
+                            }
+                            
+                            // 如果是出庫類別，更新資產狀態資訊
+                            if (targetId === 'checkoutCategory' && select.value) {
+                                updateCheckoutAssetStatusInfo(select.value);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('載入資產類別失敗:', error);
+                            // 恢復按鈕狀態
+                            refreshButton.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 刷新';
+                            refreshButton.disabled = false;
+                        });
+                });
+            });
+            
+            // 初始化頁面
+            loadCategories();
+            loadAssets(); // 初始載入資產列表
+        });
+    </script>
+</body>
+</html>
